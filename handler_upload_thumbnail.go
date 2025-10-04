@@ -73,11 +73,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	videoThumbnails[videoID] = thumbnail{
-		data:      imageData,
-		mediaType: contentType,
-	}
-
 	// saving the image to the database. yes really! but don't worry, we'll change this later
 	encodedImage := base64.StdEncoding.EncodeToString(imageData)
 
