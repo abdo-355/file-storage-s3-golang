@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -77,7 +78,18 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		mediaType: contentType,
 	}
 
-	thumbnailURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoID)
+	// saving the image to the database. yes really! but don't worry, we'll change this later
+	encodedImage := base64.StdEncoding.EncodeToString(imageData)
+
+	/*
+	*
+	* creating a data URL for the image
+	* for what the date URL check https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data
+	*
+	 */
+	thumbnailURL := fmt.Sprintf("data:%s;base64,%s", contentType, encodedImage)
+
+	// thumbnailURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoID)
 	video.ThumbnailURL = &thumbnailURL
 
 	err = cfg.db.UpdateVideo(video)
