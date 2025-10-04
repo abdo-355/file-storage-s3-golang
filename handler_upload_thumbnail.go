@@ -2,11 +2,12 @@ package main
 
 import (
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -50,10 +51,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	defer thumbnailFile.Close()
 
 	contentType := header.Header.Get("Content-Type")
-
-	imageData, err := io.ReadAll(thumbnailFile)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "couldn't read the image data", err)
+	if contentType != "image/png" && contentType != "image/jpeg" {
+		respondWithError(w, http.StatusBadRequest, "Invalid content type, must be image/png or image/jpeg", nil)
 		return
 	}
 
@@ -73,18 +72,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// saving the image to the database. yes really! but don't worry, we'll change this later
-	encodedImage := base64.StdEncoding.EncodeToString(imageData)
+	// get the file extension from the content type that looks like "image/png"
+	fileExtension := contentType[6:]
 
-	/*
-	*
-	* creating a data URL for the image
-	* for what the date URL check https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Schemes/data
-	*
-	 */
-	thumbnailURL := fmt.Sprintf("data:%s;base64,%s", contentType, encodedImage)
+	path := filepath.Join(cfg.assetsRoot, fmt.Sprintf("%s.%s", videoID.String(), fileExtension))
 
-	// thumbnailURL := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoID)
+	imageFile, err := os.Create(path)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create image file", err)
+		return
+	}
+
+	if _, err = io.Copy(imageFile, thumbnailFile); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't save image file", err)
+		return
+	}
+
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/assets/%s.%s", cfg.port, videoID.String(), fileExtension)
+
 	video.ThumbnailURL = &thumbnailURL
 
 	err = cfg.db.UpdateVideo(video)
