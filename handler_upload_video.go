@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
+	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/videos"
 	"github.com/google/uuid"
 )
 
@@ -104,16 +105,35 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	rand.Read(randName)
 	encodedName := base64.RawURLEncoding.EncodeToString(randName)
 
+	aspect, err := videos.GetVideoAspectRatio(f.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't get video aspect ratio", err)
+		return
+	}
+
+	prefix := ""
+
+	switch aspect {
+	case videos.Landscape:
+		prefix = "landscape"
+	case videos.Portrait:
+		prefix = "portrait"
+	default:
+		prefix = "other"
+	}
+
+	objectKey := fmt.Sprintf("%s/%s.mp4", prefix, encodedName)
+
 	params := s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
-		Key:         aws.String(encodedName + ".mp4"),
+		Key:         aws.String(objectKey),
 		Body:        f,
 		ContentType: aws.String("video/mp4"),
 	}
 
 	cfg.s3Client.PutObject(r.Context(), &params)
 
-	URL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s.mp4", cfg.s3Bucket, cfg.s3Region, encodedName)
+	URL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, objectKey)
 	video.VideoURL = &URL
 
 	err = cfg.db.UpdateVideo(video)
