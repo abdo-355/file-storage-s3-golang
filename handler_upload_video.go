@@ -100,6 +100,20 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	processedPath, err := videos.ProcessVideoForFastStart(f.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't process video for fast start", err)
+		return
+	}
+	defer os.Remove(processedPath)
+
+	processedFile, err := os.Open(processedPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open processed video", err)
+		return
+	}
+	defer processedFile.Close()
+
 	// generate a random name for the file
 	randName := make([]byte, 32)
 	rand.Read(randName)
@@ -127,11 +141,15 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	params := s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(objectKey),
-		Body:        f,
+		Body:        processedFile,
 		ContentType: aws.String("video/mp4"),
 	}
 
-	cfg.s3Client.PutObject(r.Context(), &params)
+	_, err = cfg.s3Client.PutObject(r.Context(), &params)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't upload video to S3", err)
+		return
+	}
 
 	URL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, objectKey)
 	video.VideoURL = &URL
